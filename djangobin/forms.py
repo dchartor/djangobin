@@ -11,7 +11,7 @@ from django.core.mail import send_mail
 
 from .models import Language, Snippet, Author, Tag
 from .utils import Preference as Pref, get_current_user
-
+from .tasks import send_activation_mail
 
 class SnippetForm(forms.ModelForm):
 
@@ -78,11 +78,11 @@ class ContactForm(forms.Form):
     purpose = forms.ChoiceField(choices=purpose_choices)
     message = forms.CharField(widget=forms.Textarea(attrs={'cols': 40, 'rows': 5}))
 
-    # def __init__(self, request, *args, **kwargs):
-    #     super(ContactForm, self).__init__(*args, **kwargs)
-    #     if request.user.is_authenticated:
-    #         self.fields['name'].required = False
-    #         self.fields['email'].required = False
+    def __init__(self, request, *args, **kwargs):
+        super(ContactForm, self).__init__(*args, **kwargs)
+        if request.user.is_authenticated:
+            self.fields['name'].required = False
+            self.fields['email'].required = False
 
 
 class CreateUserForm(UserCreationForm):
@@ -105,22 +105,11 @@ class CreateUserForm(UserCreationForm):
         user.save()
 
         context = {
-            # 'from_email': settings.DEFAULT_FROM_EMAIL,
-            'request': request,
             'protocol': request.scheme,
-            'username': self.cleaned_data.get('username'),
             'domain': request.META['HTTP_HOST'],
-            'uid': urlsafe_base64_encode(force_bytes(user.pk)).decode(),
-            'token': default_token_generator.make_token(user),
         }
 
-        subject = render_to_string('djangobin/email/activation_subject.txt', context)
-        email = render_to_string('djangobin/email/activation_email.txt', context)
-
-        # Email subject *must not* contain newlines
-        subject = ''.join(subject.splitlines())
-
-        send_mail(subject, email, settings.DEFAULT_FROM_EMAIL, [user.email])
+        send_activation_mail.delay(user.id, context)
 
         return user
 
@@ -137,3 +126,8 @@ class SettingForm(forms.ModelForm):
             'default_exposure': forms.Select(attrs={'class': 'selectpicker form-control'})
 
         }
+
+class SearchForm(forms.Form):
+    query = forms.CharField(widget=forms.TextInput(attrs={'class': 'form-control',
+                                                                'placeholder': 'Search'}))
+    mysnippet = forms.BooleanField(required=False)

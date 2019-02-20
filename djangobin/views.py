@@ -10,11 +10,13 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_bytes, force_text
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.db.models import Q
 
-from .forms import SnippetForm, ContactForm, CreateUserForm, SettingForm
+from .forms import SnippetForm, ContactForm, CreateUserForm, SettingForm, SearchForm
 from .models import Language, Snippet, Tag
 from .utils import paginate_result
 from .decorators import private_snippet
+from djangobin.tasks import send_feedback_mail
 
 
 def index(request):
@@ -77,15 +79,51 @@ def tag_list(request, tag):
 def profile(request, username):
     return HttpResponse("<p>Profile page of {}</p>".format(username))
 
+def search(request):
+    f = SearchForm(request.GET)
+    snippets = []
+
+    if f.is_valid():
+
+        query = f.cleaned_data.get('query')
+        mysnippets = f.cleaned_data.get('mysnippet')
+
+        # if mysnippet field is selected, search only logged in user's snippets
+        if mysnippets:
+            snippet_list = Snippet.objects.filter(
+                Q(user=request.user),
+                Q(original_code__icontains=query) | Q(title__icontains=query)
+            )
+
+        else:
+            qs1 = Snippet.objects.filter(
+                Q(exposure='public'),
+                Q(original_code__icontains = query) | Q(title__icontains = query)
+                # Q(user=request.user)
+            )
+
+            # if the user is logged in then search his snippets
+            if request.user.is_authenticated:
+               qs2 = Snippet.objects.filter(Q(user=request.user),
+                                            Q(original_code__icontains=query) | Q(title__icontains=query))
+               snippet_list = (qs1 | qs2).distinct()
+
+            else:
+                snippet_list = qs1
+
+        snippets = paginate_result(request, snippet_list, 5)
+
+    return render(request, 'djangobin/search.html', {'form': f, 'snippets': snippets })
+
 
 def contact(request):
     if request.method == 'POST':
-        f = ContactForm(request.POST, request)
+        f = ContactForm(request, request.POST)
         if f.is_valid():
 
             if request.user.is_authenticated:
-                name = request.POST.get('name', '')
-                email = request.POST.get('password', '')
+                name = request.user.username
+                email = request.user.email
             else:
                 name = f.cleaned_data['name']
                 email = f.cleaned_data['email']
@@ -98,7 +136,8 @@ def contact(request):
                 f.cleaned_data['message']
             )
 
-            mail_admins(subject, message)
+            send_feedback_mail.delay(subject, message)
+
             messages.add_message(request, messages.INFO, 'Thanks for submitting your feedback.')
 
             return redirect('djangobin:contact')

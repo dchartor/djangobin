@@ -1,10 +1,18 @@
 from django.urls import re_path, include, path, reverse_lazy
 from django.contrib.auth import views as auth_views
 from django.shortcuts import reverse
+from django.contrib.flatpages import views as flat_views
+from django.contrib.sitemaps.views import sitemap
 
 from . import views
+from .sitemaps import SnippetSitemap, FlatPageSitemap
 
 app_name = 'djangobin'
+
+sitemaps = {
+    'snippets' : SnippetSitemap,
+    'flatpages' : FlatPageSitemap,
+}
 
 urlpatterns = [
     path('', views.index, name='index'),
@@ -57,4 +65,8 @@ urlpatterns = [
 
     path('settings/', views.settings, name='settings'),
     path('delete/<slug:snippet_slug>', views.delete_snippet, name='delete_snippet'),
+    path('search/', views.search, name='search'),
+    path('about/', flat_views.flatpage, {'url': '/about/'}, name='about'),
+    path('eula/', flat_views.flatpage,{'url': '/eula/'}, name='eula'),
+    path('sitemap.xml/', sitemap, {'sitemaps' : sitemaps}, name='sitemap'),
 ]

@@ -36,8 +36,8 @@
         <div class="col-lg-6 col-md-6 col-sm-6">
             <h4>Related Links</h4>
             <p>
-                <a href="">My Pastes</a> <br>
-                <a href="">Settings</a> <br>
+                <a href="{% url 'djangobin:profile' request.user %}">My Pastes</a> <br>
+                <a href="{% url 'djangobin:settings' %}">Settings</a> <br>
                 <a href="">Change Password.</a> <br>
                 <a href="{% url 'djangobin:logout' %}">Logout.</a> <br>
             </p>
